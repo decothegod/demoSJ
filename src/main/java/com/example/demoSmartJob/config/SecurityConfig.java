@@ -28,7 +28,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authRequest ->
                         authRequest
                                 .requestMatchers(
-                                        AntPathRequestMatcher.antMatcher("/v1/auth/**"),
+                                        AntPathRequestMatcher.antMatcher("/v1/auth/sign-up"),
+                                        AntPathRequestMatcher.antMatcher("/v1/auth/login"),
                                         AntPathRequestMatcher.antMatcher("/h2-console/**"),
                                         AntPathRequestMatcher.antMatcher("/swagger-ui/**"),
                                         AntPathRequestMatcher.antMatcher("/swagger-resources/**"),

@@ -1,10 +1,16 @@
 package com.example.demoSmartJob.utils;
 
-import org.testng.Assert;
-import org.testng.annotations.Test;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
 
 import static com.example.demoSmartJob.util.UtilsServices.*;
 
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
 public class UtilsServicesTest {
     private static final String EMAIL_GOOD = "email@domain.org";
     private static final String EMAIL_BAD = "emaildomain.org";
@@ -14,12 +20,12 @@ public class UtilsServicesTest {
     private static final Long TIME = 1700150751269L;
 
     @Test
-    void validateValueWithRegex_Successful_Test() {
+    public void validateValueWithRegex_Successful_Test() {
         Assert.assertTrue(validateValueWithRegex(EMAIL_GOOD, REGEX_PATTERN));
     }
 
     @Test
-    void validateValueWithRegex_Fail_Test() {
+    public void validateValueWithRegex_Fail_Test() {
         Assert.assertFalse(validateValueWithRegex(EMAIL_BAD, REGEX_PATTERN));
     }
 

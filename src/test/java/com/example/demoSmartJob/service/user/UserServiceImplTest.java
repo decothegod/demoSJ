@@ -11,16 +11,20 @@ import com.example.demoSmartJob.model.Phone;
 import com.example.demoSmartJob.model.User;
 import com.example.demoSmartJob.repository.UserRepository;
 import com.example.demoSmartJob.service.jwt.JwtService;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 import java.util.Optional;
@@ -30,13 +34,16 @@ import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(SpringRunner.class)
+@SpringBootTest
 public class UserServiceImplTest {
     private static final String TEST_NAME = "userTest";
     private static final String TEST_EMAIL = "email@test.org";
     private static final String TEST_EMAIL_WRONG = "email@test";
     private static final String TEST_NUMBER = "123467";
+    private static final String TEST_NUMBER_WRONG = "123-467";
     private static final String TEST_CITY_CODE = "1";
+    private static final String TEST_CITY_CODE_WRONG = "+1";
     private static final String TEST_CONTRY_CODE = "57";
     private static final String TEST_PASSWORD = "Password12";
     private static final String TEST_PASSWORD_WRONG = "invalidPassword";
@@ -57,8 +64,12 @@ public class UserServiceImplTest {
     private AuthenticationManager authenticationManager;
     @Mock
     private ModelMapper mapper;
+    @Value("${passwordRegexPattern.regexp}")
+    private String passwordRegex;
+    @Value("${emailRegexPattern.regexp}")
+    private String emailRegex;
 
-    private User createUser() {
+    private User createUserTest() {
         Phone phone = Phone.builder()
                 .id(1L)
                 .number(Long.parseLong(TEST_NUMBER))
@@ -80,6 +91,12 @@ public class UserServiceImplTest {
                 .build();
     }
 
+    @Before
+    public void setup() {
+        ReflectionTestUtils.setField(userServiceImpl, "passwordRegex", passwordRegex);
+        ReflectionTestUtils.setField(userServiceImpl, "emailRegex", emailRegex);
+    }
+
     @Test
     public void register_Successful() {
         PhoneDTO phoneDTO = PhoneDTO.builder()
@@ -96,7 +113,7 @@ public class UserServiceImplTest {
                 .build();
 
         when(passwordEncoder.encode(anyString())).thenReturn(ENCODED_PASSWORD);
-        when(mapper.map(any(UserDTO.class), eq(User.class))).thenReturn(createUser());
+        when(mapper.map(any(UserDTO.class), eq(User.class))).thenReturn(createUserTest());
 
         UserDTO response = userServiceImpl.register(request);
         assertNotNull(response);
@@ -120,7 +137,7 @@ public class UserServiceImplTest {
                 .phones(Collections.singletonList(phoneDTO))
                 .build();
 
-        User user = createUser();
+        User user = createUserTest();
 
         UserDTO userDTO = UserDTO.builder().build();
 
@@ -143,7 +160,6 @@ public class UserServiceImplTest {
                 .phones(Collections.singletonList(phoneDTO))
                 .build();
 
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         userServiceImpl.register(request);
     }
 
@@ -162,7 +178,41 @@ public class UserServiceImplTest {
                 .phones(Collections.singletonList(phoneDTO))
                 .build();
 
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        userServiceImpl.register(request);
+    }
+
+    @Test(expected = ServiceExceptionBadRequest.class)
+    public void register_register_InvalidPhoneNumber() {
+        PhoneDTO phoneDTO = PhoneDTO.builder()
+                .number(TEST_NUMBER_WRONG)
+                .citycode(TEST_CITY_CODE)
+                .contrycode(TEST_CONTRY_CODE)
+                .build();
+
+        UserRequest request = UserRequest.builder()
+                .name(TEST_NAME)
+                .email(TEST_EMAIL)
+                .password(TEST_PASSWORD)
+                .phones(Collections.singletonList(phoneDTO))
+                .build();
+
+        userServiceImpl.register(request);
+    }
+
+    @Test(expected = ServiceExceptionBadRequest.class)
+    public void register_register_InvalidCityCode() {
+        PhoneDTO phoneDTO = PhoneDTO.builder()
+                .number(TEST_NUMBER)
+                .citycode(TEST_CITY_CODE_WRONG)
+                .contrycode(TEST_CONTRY_CODE)
+                .build();
+
+        UserRequest request = UserRequest.builder()
+                .name(TEST_NAME)
+                .email(TEST_EMAIL)
+                .password(TEST_PASSWORD)
+                .phones(Collections.singletonList(phoneDTO))
+                .build();
 
         userServiceImpl.register(request);
     }
@@ -174,7 +224,7 @@ public class UserServiceImplTest {
                 .password(TEST_PASSWORD)
                 .build();
 
-        User user = createUser();
+        User user = createUserTest();
 
         PhoneDTO phoneDTO = PhoneDTO.builder()
                 .number(TEST_NUMBER)
@@ -230,7 +280,7 @@ public class UserServiceImplTest {
         UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken =
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword());
 
-        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(createUser()));
+        when(userRepository.findByEmail(anyString())).thenReturn(Optional.of(createUserTest()));
         when(authenticationManager.authenticate(usernamePasswordAuthenticationToken))
                 .thenThrow(BadCredentialsException.class);
 

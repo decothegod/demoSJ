@@ -3,13 +3,14 @@ package com.example.demoSmartJob.service.jwt;
 import com.example.demoSmartJob.dto.ErrorResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.security.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,14 +25,14 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
 
-import static com.example.demoSmartJob.util.Constants.TOKEN_EXPIRED_MSG;
-import static com.example.demoSmartJob.util.Constants.USER_NOT_FOUND_MSG;
+import static com.example.demoSmartJob.util.Constants.*;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    private static final Logger LOG = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     @Autowired
     private final JwtServiceImpl jwtService;
     @Autowired
@@ -63,8 +64,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
             }
             filterChain.doFilter(request, response);
+        } catch (MalformedJwtException e) {
+            handleMalformedTokenException(response, e);
         } catch (ExpiredJwtException e) {
             handleExpiredTokenException(response, e);
+        } catch (SignatureException e) {
+            handleSignatureException(response, e);
         } catch (UsernameNotFoundException e) {
             handleUsernameNotFoundException(response, e);
         }
@@ -79,7 +84,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void handleExpiredTokenException(HttpServletResponse response, ExpiredJwtException e) throws IOException {
-        LOG.error("Token expired: {}", e.getMessage());
+        log.error("Token expired: {}", e.getMessage());
+        log.error(Arrays.toString(e.getStackTrace()));
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
@@ -93,12 +99,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void handleUsernameNotFoundException(HttpServletResponse response, UsernameNotFoundException e) throws IOException {
-        LOG.error(USER_NOT_FOUND_MSG);
+        log.error(USER_TOKEN_NOT_FOUND_MSG);
+        log.error(Arrays.toString(e.getStackTrace()));
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
         ErrorResponse errorResponse = ErrorResponse.builder()
-                .message(USER_NOT_FOUND_MSG)
+                .message(USER_TOKEN_NOT_FOUND_MSG)
+                .build();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonResponse = objectMapper.writeValueAsString(errorResponse);
+        response.getWriter().write(jsonResponse);
+    }
+
+    private void handleMalformedTokenException(HttpServletResponse response, MalformedJwtException e) throws IOException {
+        log.error("Token Malformed: {}", e.getMessage());
+        log.error(Arrays.toString(e.getStackTrace()));
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .message(TOKEN_MALFORMED_MSG)
+                .build();
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        String jsonResponse = objectMapper.writeValueAsString(errorResponse);
+        response.getWriter().write(jsonResponse);
+    }
+
+    private void handleSignatureException(HttpServletResponse response, SignatureException e) throws IOException {
+        log.error("Token invalid: {}", e.getMessage());
+        log.error(Arrays.toString(e.getStackTrace()));
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .message(TOKEN_INVALID_MSG)
                 .build();
 
         ObjectMapper objectMapper = new ObjectMapper();

@@ -1,5 +1,6 @@
 package com.example.demoSmartJob.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,6 +22,7 @@ public class UserDTO implements Serializable {
     private String created;
     private String modified;
     private String lastLogin;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private String token;
     private boolean isActive;
 

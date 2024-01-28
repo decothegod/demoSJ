@@ -12,7 +12,9 @@ import com.example.demoSmartJob.model.User;
 import com.example.demoSmartJob.repository.UserRepository;
 import com.example.demoSmartJob.service.jwt.JwtService;
 import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,7 +24,6 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static com.example.demoSmartJob.util.Constants.*;
@@ -48,15 +49,13 @@ public class UserServiceImpl implements UserService {
     private String emailRegex;
 
     @Override
+    @Transactional
     public UserDTO register(UserRequest request) {
-        checkExistEmail(request.getEmail());
         checkEmailFormat(request.getEmail());
         checkPasswordFormat(request.getPassword());
-
-        List<Phone> phones = new ArrayList<>();
-        for (PhoneDTO phoneDTO : request.getPhones()) {
-            phones.add(modelMapper.map(phoneDTO, Phone.class));
-        }
+        List<PhoneDTO> phoneDTOList = (request.getPhones() != null) ? request.getPhones() : List.of();
+        checkPhonesFormat(phoneDTOList);
+        checkExistEmail(request.getEmail());
 
         UserDTO userDTO = UserDTO.builder()
                 .name(request.getName())
@@ -65,29 +64,25 @@ public class UserServiceImpl implements UserService {
                 .created(covertDateStr(System.currentTimeMillis()))
                 .lastLogin(covertDateStr(System.currentTimeMillis()))
                 .isActive(Boolean.TRUE)
-                .phones(request.getPhones())
+                .phones(phoneDTOList)
                 .build();
 
-        User user = convertToEntity(userDTO);
-        user.setUUID(generateUUID());
-        user.setPhones(phones);
-        userDTO.setToken(jwtService.getToken(user));
-        userDTO.setId(user.getUUID());
-        userRepository.save(user);
-
+        userRepository.save(createUser(userDTO));
 
         return userDTO;
     }
 
     @Override
+    @Transactional
     public UserDTO login(LoginRequest request) {
         try {
-            User user = getUser(request.getEmail());
-
+            checkEmailFormat(request.getEmail());
             authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
-            UserDTO userDTO = convertToDto(user);
-            updateLastLogin(request.getEmail(), userDTO);
+            User user = getUser(request.getEmail());
+            updateLastLogin(user);
+
+            UserDTO userDTO = convertToDTO(user);
             userDTO.setToken(jwtService.getToken(user));
             userDTO.setId(user.getUUID());
 
@@ -102,12 +97,32 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    private UserDTO convertToDto(User user) {
-        return modelMapper.map(user, UserDTO.class);
+    @Override
+    public List<UserDTO> getAllUsers() {
+        List<User> users = userRepository.findAll();
+        return users.stream().map(this::convertToDTO).toList();
     }
 
-    private User convertToEntity(UserDTO userDto) {
-        return modelMapper.map(userDto, User.class);
+    @Override
+    public UserDTO getUserByUUID(String UUID) {
+        User user = userRepository.findByUUID(UUID)
+                .orElseThrow(() -> new ServiceExceptionNotFound(USER_NOT_FOUND_MSG));
+        return convertToDTO(user);
+    }
+
+    private UserDTO convertToDTO(User user) {
+        UserDTO userDTO = modelMapper.map(user, UserDTO.class);
+        userDTO.setId(user.getUUID());
+        return userDTO;
+    }
+
+    private User createUser(UserDTO userDTO) {
+        User user = modelMapper.map(userDTO, User.class);
+        user.setUUID(generateUUID());
+        userDTO.setToken(jwtService.getToken(user));
+        userDTO.setId(user.getUUID());
+        user.setPhones(userDTO.getPhones().stream().map(phoneDTO -> modelMapper.map(phoneDTO, Phone.class)).toList());
+        return user;
     }
 
     private User getUser(String email) {
@@ -115,15 +130,9 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new ServiceExceptionNotFound(USER_NOT_FOUND_MSG));
     }
 
-    private void updateLastLogin(String username, UserDTO userDTO) {
-        if (userRepository.findByEmail(username).isPresent()) {
-            userRepository.findByEmail(username)
-                    .map(user -> {
-                        user.setLastLogin(covertDateStr(System.currentTimeMillis()));
-                        userDTO.setLastLogin(user.getLastLogin());
-                        return userRepository.save(user);
-                    });
-        }
+    private void updateLastLogin(User user) {
+        user.setLastLogin(covertDateStr(System.currentTimeMillis()));
+        userRepository.save(user);
     }
 
     private void checkExistEmail(String email) {
@@ -147,4 +156,23 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    private void checkPhonesFormat(List<PhoneDTO> phones) {
+        if (phones != null) {
+            phones.stream()
+                    .filter(phoneDTO -> !StringUtils.isNumeric(phoneDTO.getNumber()))
+                    .findFirst()
+                    .ifPresent(phoneDTO -> {
+                        log.error(INVALID_PHONE_NUMBER_FORMAT_MSG + phoneDTO.getNumber());
+                        throw new ServiceExceptionBadRequest(INVALID_PHONE_NUMBER_FORMAT_MSG + phoneDTO.getNumber());
+                    });
+
+            phones.stream()
+                    .filter(phoneDTO -> !StringUtils.isNumeric(phoneDTO.getCitycode()))
+                    .findFirst()
+                    .ifPresent(phoneDTO -> {
+                        log.error(INVALID_CITY_CODE_FORMAT_MSG + phoneDTO.getCitycode());
+                        throw new ServiceExceptionBadRequest(INVALID_CITY_CODE_FORMAT_MSG + phoneDTO.getCitycode());
+                    });
+        }
+    }
 }
